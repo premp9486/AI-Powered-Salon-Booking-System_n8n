@@ -1,0 +1,823 @@
+{
+  "name": "AI Salon Booking Agent - Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Extract message data from Telegram\nconst msg = $input.item.json.message || $input.item.json;\n\n// CRITICAL: Use from.id for consistent user identification\nconst userId = msg.from?.id || msg.chat?.id;\nconst chatId = msg.chat?.id;\nconst userName = msg.from?.first_name || msg.from?.username || 'Customer';\nconst messageText = (msg.text || '').trim();\n\n// Convert to string for consistency\nconst consistentUserId = String(userId);\n\nconsole.log('=== USER IDENTIFICATION ===');\nconsole.log('User ID (from.id):', userId);\nconsole.log('Chat ID:', chatId);\nconsole.log('Message:', messageText);\n\nreturn {\n  json: {\n    message: msg,  // Keep original for other uses\n    chatId: String(chatId),\n    userId: consistentUserId,  // ← THIS is what memory uses\n    userName: userName,\n    userMessage: messageText,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Extract User Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        256
+      ],
+      "id": "827aa81e-054d-4461-b860-03cc4a4db146"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service_list",
+              "name": "serviceList",
+              "type": "string",
+              "value": "=HAIRCUT:\n- Hair Cut - Women ($2000, 30min)\n- Hair Cut - Men ($850, 30min)\n- Hair Cut - Kids ($650, 30min)\n- Hair Trim ($1000, 30min)\n\nHAIR COLOR:\n- Hair Color - Women ($8000, 30min)\n- Hair Color - Men ($3000, 30min)\n- Hair Color - Crown Touch up ($1700, 30min)\n- Highlights ($8000, 30min)\n- Highlights - Crown ($4000, 30min)\n\nHAIR STYLING:\n- Blow Dry ($750, 30min)\n- Wash and Blow Dry ($650, 30min)\n- Wash and Blast Dry ($550, 30min)\n- Hair Wash ($400, 30min)\n- Ironing ($1200, 30min)\n- Tongs ($1200, 30min)\n- Hair Up-dos ($1500, 30min)\n- Glitter Thread ($100, 30min)\n- Hair Extensions ($1, 30min)\n\nHAIR TREATMENT:\n- Hair Spa ($3000, 30min)\n- Hair Nourishment Treatment ($3500, 30min)\n- Hair Smoothening ($8000, 30min)\n\nMAKEUP:\n- Basic Makeup ($2500, 30min)\n\nFACIAL:\n- Facial ($4200, 30min)\n\nWAXING:\n- Waxing - Full Face ($700, 30min)\n- Waxing - Underarm ($250, 30min)\n- Waxing - Full Hand ($800, 30min)\n- Waxing - Legs ($1000, 30min)\n- Waxing - Stomach ($800, 30min)\n\nTHREADING:\n- Threading ($100, 30min)\n\nNAILS:\n- Cut n Filing ($150, 30min)\n- Nail Paint ($300, 30min)\n\nPEDICURE:\n- Pedicure ($1400, 30min)\n\nMASSAGE:\n- Body Massage ($4000, 30min)\n- Foot Massage ($1400, 30min)\n- Head Massage ($1200, 30min)\n\nSPA:\n- Cocktail Spa ($1000, 30min)\n\nEYES:\n- Eyelash Extension ($4500, 30min)\n\nTATTOO:\n- Tattoo Services (Price on request, 30min)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Load Service List",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        656,
+        256
+      ],
+      "id": "1c0c4219-fdb5-4bee-9941-79ad90f3168e"
+    },
+    {
+      "parameters": {
+        "agent": "conversationalAgent",
+        "promptType": "define",
+        "text": "=You are an AI booking assistant for a premium salon. Your job is to help customers book appointments and answer their questions in a friendly, professional manner.\n\n**SALON INFORMATION:**\n\n📍 **Location:**\nhouse of salon \nkap india pune\nmaharastrea\n\n📞 **Contact:**\nPhone: 9876543210\nWhatsApp: 987654321\nEmail: abc@gmail.com\n\n🕐 **Business Hours:**\nMonday to Saturday: 9:00 AM - 7:00 PM\nSunday: Closed\n(Last appointment at 6:30 PM)\n\n📅 **Booking Policy:**\n- Advance booking required (minimum 2 hours notice)\n- Same-day appointments subject to availability\n- Can book up to 30 days in advance\n- Cancellations accepted up to 2 hours before appointment\n\n💳 **Payment Methods:**\n- Cash\n- UPI (Google Pay, PhonePe, Paytm)\n- Credit/Debit Cards\n- Online Banking\n\n🎁 **Special Offers:**\n- First-time customer: 10% discount\n- Birthday month: Special package available\n- Refer a friend: Both get ₹200 off\n- Membership packages available (ask for details)\n\n👥 **Staff:**\n- Experienced stylists with 5+ years experience\n- Certified beauticians\n- Trained in latest techniques\n- Hygienic and professional service\n\n🏆 **Specialties:**\n- Bridal makeup and styling\n- Hair coloring and highlights\n- Keratin treatments\n- Spa and wellness services\n- Party makeup\n\n⚠️ **Important Notes:**\n- Patch test required 24 hours before hair color/chemical treatments\n- Please arrive 5 minutes before appointment time\n- Late arrivals may result in reduced service time\n- Pregnant customers should inform us for service modifications\n\n**AVAILABLE SERVICES:**\n{{ $('Load Service List').item.json.serviceList }}\n\n**CONVERSATION CONTEXT:**\nUser: {{ $('Extract User Data').item.json.userName }}\nUser Message: \"{{ $('Extract User Data').item.json.userMessage }}\"\n\n**CURRENT TIME:**\nToday's Date: {{ $json.currentDate }}\nCurrent Time: {{ $json.currentTime }}\nCurrent Hour (24hr): {{ $json.currentHour }}\n\n**TIME VALIDATION RULES:**\n- Minimum 2 hours advance notice required\n- If current hour is 11 and user wants 5 PM (17:00), that's 6 hours away = VALID ✅\n- If current hour is 15 (3 PM) and user wants 5 PM, that's 2 hours away = VALID ✅\n- If current hour is 16 (4 PM) and user wants 5 PM, that's 1 hour away = INVALID ❌\n- Last appointment at 6:30 PM (18:30)\n- No appointments on Sunday\n\n**YOUR TASK:**\nAnalyze the user's message and respond appropriately:\n\n1. **If asking about salon information (location, hours, contact, policies):**\n   - Provide accurate information from SALON INFORMATION section above\n   - Be specific and helpful\n   - Offer to help with booking if relevant\n\n2. **BOOKING FLOW - Follow these steps:**\n\nSTEP 1: IDENTIFY SERVICE INTENT\n- If user mentions a service category (haircut, massage, facial, etc.)\n- Show ALL options in that category with prices\n- Example: \"I want a haircut\" → List all haircut types\n\nSTEP 2: CONFIRM SPECIFIC SERVICE & COLLECT DATE/TIME\n- Once user chooses specific service (e.g., \"Hair Cut - Men\")\n- Check if they ALREADY mentioned date/time in previous messages\n- If YES: Skip to Step 3 (ask for phone)\n- If NO: Ask \"When would you like to come? Please share your preferred date and time.\"\n\nSTEP 3: COLLECT PHONE NUMBER\n- Once you have service + date + time\n- Ask for phone numberPHONE DETECTION RULE:\nIf the user message contains a 10-digit numeric string (e.g., 9873031144),\ntreat it as the phone number immediately.\nDo not ask for phone again.\nProceed to final confirmation.\n- Example: \"Perfect! Please share your phone number so we can confirm the booking.\"\n\nSTEP 4: FINAL CONFIRMATION\n- Once you have ALL 4 details (service, date, time, phone)\n- Verify the time meets the 2-hour advance notice requirement\n- Verify it's within business hours (Mon-Sat, 9 AM - 6:30 PM)\n- If valid, summarize everything and use this EXACT phrase: \"I'm creating your booking now\"\n- Example: \n  \"Let me confirm your booking:\n   - Service: Hair Cut - Men (₹850, 30min)\n   - Date: Sunday, March 2nd\n   - Time: 12:00 PM\n   - Phone: 9873031144\n   \n   I'm creating your booking now. You'll receive a confirmation shortly!\"\n\n**IMPORTANT RULES:**\n1. Ask for ONE thing at a time (don't overwhelm user)\n2. ALWAYS review chat history - never ask for information already provided\n3. If user provides multiple details at once (service + date + time), acknowledge all and only ask for phone\n4. Validate timing against current time (use CURRENT TIME section above)\n5. Be friendly and conversational\n6. ONLY use \"I'm creating your booking now\" when you have ALL 4 details AND time is valid\n\n**MEMORY RULES:**\n7. Before responding, check what you already have:\n   □ SERVICE NAME - Do I know which service?\n   □ DATE - Do I know which day?\n   □ TIME - Do I know what time?\n   □ PHONE - Do I know phone number?\n8. NEVER ask for the same information twice\n9. If you have all 4 items, proceed to final confirmation\n\n**EXAMPLES:**\n\nExample 1 - All details at once:\nUser: \"hair cut men at 5 pm today\"\nYou: \"Great choice! Hair Cut - Men at 5 PM today works perfectly (it's currently 11:15 AM, so that's plenty of notice). Please share your phone number for confirmation.\"\n\nUser: \"9873031144\"\nYou: \"Perfect! Let me confirm your booking:\n- Service: Hair Cut - Men (₹850, 30min)\n- Date: Today (Monday, 3rd March)\n- Time: 5:00 PM\n- Phone: 9873031144\n\nI'm creating your booking now. You'll receive a confirmation shortly!\"\n\nExample 2 - Step by step:\nUser: \"haircut\"\nYou: [Show options]\n\nUser: \"hair cut men\"\nYou: \"Great choice! When would you like to come?\"\n\nUser: \"2 march at 12 pm\"\nYou: \"Perfect! March 2nd at 12 PM. Please share your phone number.\"\n\nUser: \"9873031144\"\nYou: \"Perfect! Let me confirm your booking:\n- Service: Hair Cut - Men (₹850, 30min)\n- Date: Sunday, March 2nd\n- Time: 12:00 PM\n- Phone: 9873031144\n\nI'm creating your booking now. You'll receive a confirmation shortly!\"\n    ↑ AI MUST remember service/date/time from previous messages\n\n**RESPONSE FORMAT:**\n- Keep responses natural and friendly\n- Use emojis sparingly (1-2 max)\n- Be concise but warm\n- Reference information from previous messages to show you're listening",
+        "options": {}
+      },
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        1088,
+        256
+      ],
+      "id": "8ce18ae2-4f8f-4c30-80c1-76cede253599"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "196785d6-882f-46eb-8ac8-a585a4800056",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "creating your booking",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "978334d2-e873-4028-8313-10bf9b102abd",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "confirm all details",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "928de7ef-54dd-4612-b704-d7824297b24b",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": "You'll receive a confirmation",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "name": "Check If Ready to Book",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        256
+      ],
+      "id": "6c4fbdb5-6115-4560-b239-e7e4aa5289f9"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse booking details from AI's confirmation message\nconst aiResponse = $('AI Agent').item.json.output || '';\nconst userName = $('Extract User Data').item.json.userName || 'Customer';\nconst userId = $('Extract User Data').item.json.userId || '';\nconst chatId = $('Extract User Data').item.json.chatId || '';\n\nconsole.log('=== PARSING BOOKING ===');\nconsole.log('AI Response:', aiResponse);\n\n// Helper function to extract info\nfunction extractField(text, markers) {\n  for (const marker of markers) {\n    const regex = new RegExp(marker + '\\\\s*:?\\\\s*([^\\\\n-]+)', 'i');\n    const match = text.match(regex);\n    if (match) {\n      return match[1].trim().replace(/\\(.*?\\)/g, '').trim();\n    }\n  }\n  return null;\n}\n\n// Extract booking details\nlet service = extractField(aiResponse, ['Service', '- Service']);\nlet date = extractField(aiResponse, ['Date', '- Date']);\nlet time = extractField(aiResponse, ['Time', '- Time']);\nlet phone = extractField(aiResponse, ['Phone', '- Phone']);\n\n// Extract price\nlet price = 'N/A';\nconst priceMatch = aiResponse.match(/₹(\\d+)/);\nif (priceMatch) {\n  price = priceMatch[1];\n}\n\n// Extract duration\nlet duration = '30';\nconst durationMatch = aiResponse.match(/(\\d+)min/);\nif (durationMatch) {\n  duration = durationMatch[1];\n}\n\n// Generate unique booking ID\nconst bookingId = `BK${Date.now()}`;\n\n// Format date\nlet formattedDate = date || 'Not specified';\nlet bookingDateObj = new Date();\n\n// Parse \"March 2, 2026\" or \"2nd march\" format\nif (date) {\n  const dateMatch = date.match(/(\\w+)\\s+(\\d+)/i);\n  if (dateMatch) {\n    const month = dateMatch[1];\n    const day = parseInt(dateMatch[2]);\n    const year = new Date().getFullYear();\n    \n    const monthMap = {\n      'january': 0, 'jan': 0,\n      'february': 1, 'feb': 1,\n      'march': 2, 'mar': 2,\n      'april': 3, 'apr': 3,\n      'may': 4,\n      'june': 5, 'jun': 5,\n      'july': 6, 'jul': 6,\n      'august': 7, 'aug': 7,\n      'september': 8, 'sep': 8,\n      'october': 9, 'oct': 9,\n      'november': 10, 'nov': 10,\n      'december': 11, 'dec': 11\n    };\n    \n    const monthNum = monthMap[month.toLowerCase()];\n    if (monthNum !== undefined) {\n      bookingDateObj = new Date(year, monthNum, day);\n      formattedDate = bookingDateObj.toLocaleDateString('en-IN', {\n        weekday: 'long',\n        day: 'numeric',\n        month: 'long',\n        year: 'numeric'\n      });\n    }\n  }\n}\n\n// Parse time to 24-hour format\nlet hour = 17; // Default 5 PM\nlet minute = 0;\nif (time) {\n  const timeMatch = time.match(/(\\d+):?(\\d{0,2})\\s*(AM|PM)?/i);\n  if (timeMatch) {\n    hour = parseInt(timeMatch[1]);\n    minute = parseInt(timeMatch[2] || 0);\n    const ampm = (timeMatch[3] || 'PM').toUpperCase();\n    \n    if (ampm === 'PM' && hour !== 12) hour += 12;\n    if (ampm === 'AM' && hour === 12) hour = 0;\n  }\n}\n\n// Set time on booking date\nbookingDateObj.setHours(hour, minute, 0, 0);\n\nconsole.log('Extracted Values:');\nconsole.log('- Service:', service);\nconsole.log('- Date:', formattedDate);\nconsole.log('- Time:', time);\nconsole.log('- Phone:', phone);\nconsole.log('- Price:', price);\n\nreturn {\n  json: {\n    bookingId,\n    customerName: userName,\n    userId,\n    chatId,\n    service: service || 'Not specified',\n    servicePrice: price,\n    serviceDuration: duration,\n    date: formattedDate,\n    bookingDate: bookingDateObj.toISOString(),\n    bookingDateObj: bookingDateObj.toISOString().split('T')[0], // YYYY-MM-DD\n    time: time || 'Not specified',\n    bookingHour: hour,\n    bookingMinute: minute,\n    phone: phone || 'Not specified',\n    status: 'Confirmed',\n    createdAt: new Date().toISOString(),\n    staffAssigned: 'Pending',\n    calendarEventId: '',\n    notificationSent: 'No'\n  }\n};"
+      },
+      "name": "Parse Booking Details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        160
+      ],
+      "id": "3f7eefe1-4a77-4936-879e-2cf2c50ab722"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "response",
+              "name": "response",
+              "type": "string",
+              "value": "={{ $('AI Agent').item.json.output }}"
+            },
+            {
+              "id": "chatId",
+              "name": "chatId",
+              "type": "string",
+              "value": "={{ $('Extract User Data').item.json.chatId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Format AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1888,
+        400
+      ],
+      "id": "8ece9b83-53fa-45de-ad59-8ec578248166"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "name": "Wait for Both",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3008,
+        256
+      ],
+      "id": "8be796af-23eb-40a4-9ea8-9377c47ef370"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        208,
+        256
+      ],
+      "id": "5158b248-159f-4161-afb6-8c989f7a003f",
+      "name": "Telegram Trigger",
+      "webhookId": "a06fa650-23c5-48c1-a560-044fbe115392",
+      "credentials": {
+        "telegramApi": {
+          "id": "6vmN4RzIF1jdM2UC",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE",
+          "mode": "list",
+          "cachedResultName": "Salon Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking ID": "={{ $json.bookingId }}",
+            "Customer Name": "={{ $json.customerName }}",
+            "Phone": "={{ $json.phone }}",
+            "Service": "={{ $json.service }}",
+            "Price": "={{ $json.servicePrice }}",
+            "Date": "={{ $json.date }}",
+            "Time": "={{ $json.time }}",
+            "Status": "={{ $json.status }}",
+            "Staff Assigned": "={{ $json.staffAssigned }}",
+            "Created At": "={{ $json.createdAt }}",
+            "User ID": "={{ $json.userId }}",
+            "Notification Sent": "YES",
+            "Calendar Event ID": "={{ $json.calendarEventId }}"
+          },
+          "matchingColumns": [
+            "Booking ID"
+          ],
+          "schema": [
+            {
+              "id": "Booking ID",
+              "displayName": "Booking ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Service",
+              "displayName": "Service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Price",
+              "displayName": "Price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Staff Assigned",
+              "displayName": "Staff Assigned",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Created At",
+              "displayName": "Created At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "User ID",
+              "displayName": "User ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Calendar Event ID",
+              "displayName": "Calendar Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Notification Sent",
+              "displayName": "Notification Sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2096,
+        160
+      ],
+      "id": "f2e554af-70a9-4b30-b34d-832be0ba7626",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "T1WwQGQie0QhwphY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        816,
+        496
+      ],
+      "id": "83d626cf-f99a-49ff-801e-3d9a86760cb0",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "1T3ZrRwrtxJlwGn8",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2752,
+        160
+      ],
+      "id": "1882a52d-2742-4633-b5e8-38649d0f4ced",
+      "name": "Send a text message",
+      "webhookId": "5b25ecda-f3ec-4f93-9fbd-11632aaefa41",
+      "credentials": {
+        "telegramApi": {
+          "id": "6vmN4RzIF1jdM2UC",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.response }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2176,
+        400
+      ],
+      "id": "5ba9d992-c6e6-4aad-acff-4f5dd50a6db2",
+      "name": "Send a text message1",
+      "webhookId": "5ac1544e-d414-4d62-92ac-f1db12be699d",
+      "credentials": {
+        "telegramApi": {
+          "id": "6vmN4RzIF1jdM2UC",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Extract User Data').item.json.message.from.id }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        976,
+        528
+      ],
+      "id": "26039395-52da-448b-9dd9-3167782b95a5",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE",
+          "mode": "list",
+          "cachedResultName": "Salon Bookings",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2052272854,
+          "mode": "list",
+          "cachedResultName": "Staff",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1em6HhRfQGRlyfif3LIurLYAcTCh8uQsadk_aCenCsoE/edit#gid=2052272854"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1824,
+        -128
+      ],
+      "id": "33c31138-9cdd-4e80-bad1-e910670f6057",
+      "name": "Get Staff List",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "T1WwQGQie0QhwphY",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get booking and staff list\nconst booking = $('Parse Booking Details').item.json;\nconst allStaff = $input.all(); // All staff from sheet\n\nconst service = (booking.service || '').toLowerCase();\n\nconsole.log('=== STAFF ASSIGNMENT ===');\nconsole.log('Service:', service);\nconsole.log('Available Staff:', allStaff.length);\n\n// Filter active staff who can do this service\nconst capableStaff = allStaff.filter(item => {\n  const staff = item.json;\n  const isActive = (staff.Status || '').toLowerCase() === 'active';\n  const services = (staff.Services || '').toLowerCase();\n  \n  console.log(`Checking ${staff['Staff Name']}: Active=${isActive}, Services=${services}`);\n  \n  // Check if staff can do this service\n  const canDoService = services.split(',').some(s => \n    service.includes(s.trim()) || s.trim().includes(service.split(' ')[0])\n  );\n  \n  return isActive && canDoService;\n});\n\nconsole.log('Capable Staff:', capableStaff.length);\n\n// If no one can do it specifically, use any active staff\nlet selectedStaff = capableStaff.length > 0 ? capableStaff : \n                     allStaff.filter(item => \n                       (item.json.Status || '').toLowerCase() === 'active'\n                     );\n\n// Round-robin or random selection\nconst staffIndex = Math.floor(Math.random() * selectedStaff.length);\nconst assignedStaff = selectedStaff[staffIndex]?.json || {\n  'Staff ID': 'UNASSIGNED',\n  'Staff Name': 'To Be Assigned',\n  'Calendar ID': ''\n};\n\nconsole.log('Assigned to:', assignedStaff['Staff Name']);\n\nreturn {\n  json: {\n    ...booking,\n    staffId: assignedStaff['Staff ID'],\n    staffName: assignedStaff['Staff Name'],\n    calendarId: assignedStaff['Calendar ID'],\n    staffAssigned: assignedStaff['Staff Name']\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        -96
+      ],
+      "id": "bd109859-bdf2-4136-a81f-53785786fd6f",
+      "name": "Get Staff List1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const booking = $input.item.json;\n\n// Parse time from \"5:00 PM\"\nfunction parseTime(timeStr) {\n  const match = (timeStr || '').match(/(\\d+):?(\\d{0,2})?\\s*(AM|PM)/i);\n  if (!match) return { hour: 17, minute: 0 };\n\n  let hour = parseInt(match[1]);\n  const minute = parseInt(match[2] || 0);\n  const ampm = match[3].toUpperCase();\n\n  if (ampm === 'PM' && hour !== 12) hour += 12;\n  if (ampm === 'AM' && hour === 12) hour = 0;\n\n  return { hour, minute };\n}\n\nconst { hour, minute } = parseTime(booking.time);\n\n// Build LOCAL date manually (Asia/Kolkata safe)\nconst [year, month, day] = booking.bookingDateObj.split('-');\n\n// month - 1 because JS months are 0 indexed\nconst startDate = new Date(\n  Number(year),\n  Number(month) - 1,\n  Number(day),\n  hour,\n  minute,\n  0\n);\n\n// 30 minute duration\nconst endDate = new Date(startDate.getTime() + (booking.serviceDuration || 30) * 60000);\n\nreturn {\n  json: {\n    ...booking,\n    calendarStartDateTime: startDate.toISOString(),\n    calendarEndDateTime: endDate.toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2288,
+        -96
+      ],
+      "id": "79c6bead-b907-48f1-93a3-050119754d26",
+      "name": "Format DateTime"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $json.calendarId }}",
+          "mode": "id",
+          "__regex": "(^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*)"
+        },
+        "start": "={{ $json.calendarStartDateTime }}",
+        "end": "={{ $json.calendarEndDateTime }}",
+        "additionalFields": {
+          "description": "=📋 Booking ID: {{ $json.bookingId }} 👤 Customer: {{ $json.customerName }} 📱 Phone: {{ $json.phone }} 💰 Price: ₹{{ $json.servicePrice }}  🔔 Automated booking via Telegram Bot  Location: [Your Salon Address]  Color: 9 (Blue)"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2496,
+        -96
+      ],
+      "id": "cdcfd7df-105e-40d1-ae7b-96491555928a",
+      "name": "Create an event",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "JUDwPjwilPWXwqjt",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const booking = $('Format DateTime').item.json;\nconst calendarEvent = $input.item.json;\n\nreturn {\n  json: {\n    ...booking,\n    calendarEventId: calendarEvent.id || '',\n    calendarEventLink: calendarEvent.htmlLink || ''\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2704,
+        -96
+      ],
+      "id": "2c68ae5e-dcb3-4615-9165-49aafd9c5538",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\n\n// Current time info\nconst currentTime = now.toLocaleString('en-IN', {\n  hour: '2-digit',\n  minute: '2-digit',\n  hour12: true,\n  timeZone: 'Asia/Kolkata'\n});\n\nconst currentDate = now.toLocaleDateString('en-IN', {\n  weekday: 'long',\n  day: 'numeric',\n  month: 'long',\n  year: 'numeric',\n  timeZone: 'Asia/Kolkata'\n});\n\nconst currentHour = now.getHours();\nconst currentMinute = now.getMinutes();\n\nreturn {\n  json: {\n    ...($input.item.json),\n    currentTime: currentTime,\n    currentDate: currentDate,\n    currentHour: currentHour,\n    currentMinute: currentMinute,\n    currentTimestamp: now.toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        256
+      ],
+      "id": "5e963ec2-43c7-4d94-afec-e033e7fd23eb",
+      "name": "time info"
+    },
+    {
+      "parameters": {
+        "jsCode": "const booking = $input.item.json;\n\nreturn {\n  json: {\n    chatId: booking.chatId || booking[\"User ID\"],\n\n    message: `✅ BOOKING CONFIRMED! 🎉\n\n📋 Booking ID: ${booking[\"Booking ID\"]}\n\n👤 Name: ${booking[\"Customer Name\"]}\n📱 Phone: ${booking[\"Phone\"]}\n\n💇 Service: ${booking[\"Service\"]}\n💰 Price: ₹${booking[\"Price\"]}\n\n📅 Date: ${booking[\"Date\"]}\n⏰ Time: ${booking[\"Time\"]}\n👩 Staff: ${booking[\"Staff Assigned\"]}\n\n📍 Location: house of salon\nkap india pune, maharashtra\n\n⚠️ Please arrive 5 minutes early.\nBring your Booking ID: ${booking[\"Booking ID\"]}\n\nThank you for choosing us! 💖`\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        160
+      ],
+      "id": "8345187e-9c91-4a5c-bd47-91a7707e9130",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract User Data": {
+      "main": [
+        [
+          {
+            "node": "Load Service List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Service List": {
+      "main": [
+        [
+          {
+            "node": "time info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Check If Ready to Book",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Ready to Book": {
+      "main": [
+        [
+          {
+            "node": "Parse Booking Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Booking Details": {
+      "main": [
+        [
+          {
+            "node": "Get Staff List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract User Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message1": {
+      "main": [
+        [
+          {
+            "node": "Wait for Both",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Staff List": {
+      "main": [
+        [
+          {
+            "node": "Get Staff List1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Staff List1": {
+      "main": [
+        [
+          {
+            "node": "Format DateTime",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format DateTime": {
+      "main": [
+        [
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "time info": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "c4f0f736-1f99-4e07-9e97-62f63d37832d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f4130b78440ad1dd71560ab7589c0fc2bbcbbede3e8a78bdff8749136d78df12"
+  },
+  "id": "Ml4Oj5X5ZhQOtGQV",
+  "tags": []
+}
